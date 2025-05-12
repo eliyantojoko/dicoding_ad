@@ -24,38 +24,32 @@ def load_data():
 
 df = load_data()
 
-# Sidebar filter tanggal
-st.sidebar.header("Filter Tanggal")
+st.sidebar.header("Date Filter")
 min_date = df["order_purchase_timestamp"].min()
 max_date = df["order_purchase_timestamp"].max()
 
 start_date, end_date = st.sidebar.date_input(
-    "Pilih rentang tanggal:",
+    "Select date range:",
     [min_date.date(), max_date.date()],
     min_value=min_date.date(),
     max_value=max_date.date()
 )
 
-# Sidebar: Pilih kategori produk dengan checkbox satu per satu
-st.sidebar.header("Filter Kategori Produk")
-with st.sidebar.expander("Pilih kategori produk:"):
+st.sidebar.header("Product Category Filter")
+with st.sidebar.expander("Select product categories:"):
     product_categories = sorted(df["product_category_name_english"].dropna().unique())
     selected_categories = []
     for category in product_categories:
         if st.checkbox(category, value=True):
             selected_categories.append(category)
 
-# Filter data berdasarkan tanggal dan kategori
 filtered_df = df[
     (df["order_purchase_timestamp"].dt.date >= start_date) &
     (df["order_purchase_timestamp"].dt.date <= end_date) &
     (df["product_category_name_english"].isin(selected_categories))
 ]
 
-#----- Pie Chart (Plotly) Distribusi Status Pengiriman -----
-# st.subheader("Distribusi Status Pengiriman")
 
-# Hitung distribusi pengiriman
 df_late = filtered_df.groupby(['delivered_late']).agg({"order_id": "count"}).reset_index()
 df_late = df_late.sort_values(by="order_id", ascending=True)
 df_late['delivered_late'] = df_late['delivered_late'].map({
@@ -63,7 +57,6 @@ df_late['delivered_late'] = df_late['delivered_late'].map({
     True: 'Late Deliveries'
 })
 
-# Buat pie chart dengan Plotly
 fig_pie = px.pie(
     df_late,
     values='order_id',
@@ -74,26 +67,20 @@ fig_pie = px.pie(
         'Late Deliveries': '#ff9999'
     },
     title='Delivery Status Distribution',
-    hole=0.3  # untuk tampilkan sebagai donut chart, hapus kalau mau pie biasa
+    hole=0.3 
 )
 
-# ----- Stacked Bar Chart Bulanan (Plotly) -----
-# st.subheader("Status Pengiriman Bulanan")
 
-# Pastikan kolom order_month bertipe period
 filtered_df['order_month'] = filtered_df['order_purchase_timestamp'].dt.to_period('M').astype(str)
 
-# Hitung jumlah pesanan per bulan berdasarkan status pengiriman
 df_monthly_status = filtered_df.groupby(['order_month', 'delivered_late'])['order_id'].count().reset_index()
 
-# Ganti label boolean jadi string
 df_monthly_status['delivered_late'] = df_monthly_status['delivered_late'].map({
     False: 'On-time Delivery',
     True: 'Late Deliveries'
 })
 
 
-# Buat stacked bar chart dengan Plotly
 fig_bar = px.bar(
     df_monthly_status,
     x='order_month',
@@ -109,17 +96,12 @@ fig_bar = px.bar(
 
 fig_bar.update_layout(barmode='stack', xaxis_tickangle=-45)
 
-# ----- Horizontal Stacked Bar Chart: Top 10 Cities by Delivery Status -----
-# st.subheader("Top 10 Kota dengan Status Pengiriman Terbanyak")
 
-# Hitung jumlah pengiriman per kota dan status
 df_city_status = filtered_df.groupby(['customer_city', 'delivered_late'])['order_id'].count().unstack(fill_value=0)
 
-# Ambil 10 kota teratas berdasarkan total pengiriman
 top_10_cities = df_city_status.sum(axis=1).nlargest(10).index
 df_top10_city_status = df_city_status.loc[top_10_cities]
 
-# Ubah dari wide ke long format untuk plotly
 df_top10_city_status_long = df_top10_city_status.reset_index().melt(
     id_vars='customer_city',
     value_vars=[False, True],
@@ -127,13 +109,11 @@ df_top10_city_status_long = df_top10_city_status.reset_index().melt(
     value_name='order_count'
 )
 
-# Ganti nama status pengiriman
 df_top10_city_status_long['delivered_late'] = df_top10_city_status_long['delivered_late'].map({
     False: 'On-time Delivery',
     True: 'Late Deliveries'
 })
 
-# Buat horizontal stacked bar chart
 fig_city = px.bar(
     df_top10_city_status_long,
     x='order_count',
@@ -148,100 +128,78 @@ fig_city = px.bar(
     }
 )
 
-# Urutkan kota berdasarkan total pengiriman (agar terbesar di atas)
 fig_city.update_layout(
     barmode='stack',
     yaxis={'categoryorder': 'total ascending'},
     legend_title='Delivery Status'
 )
 
-# Menghitung jumlah pesanan terlambat per kota
 df_late_deliveries = df[df['delivered_late'] == True]
 late_orders_per_city = df_late_deliveries.groupby('customer_city')['order_id'].count()
 
-# Menghitung rata-rata review score per kota
 avg_review_per_city = df.groupby('customer_city')['calculated_review_score'].mean()
 
-# Menggabungkan kedua informasi menjadi satu DataFrame
 df_late_and_reviews = pd.DataFrame({
     'late_orders': late_orders_per_city,
     'avg_review_score': avg_review_per_city
-}).dropna()  # Menghapus NaN jika ada kota yang tidak memiliki pesanan terlambat atau review
+}).dropna()  
 
-# Membuat scatter plot menggunakan Plotly
 fig_scatter = px.scatter(
     df_late_and_reviews,
     x='late_orders',
     y='avg_review_score',
     title='Relationship Between Late Orders and Average Review Score',
     labels={'late_orders': 'Number of Late Orders', 'avg_review_score': 'Average Review Score'},
-    color='avg_review_score',  # Memberikan warna berdasarkan rating review
+    color='avg_review_score',  
     color_continuous_scale='Blues',
     opacity=0.7
 )
 
 
-# Layout dengan dua kolom: Pie chart di kolom kiri dan Bar chart di kolom kanan
 col1, col2 = st.columns(2)
 
 with col1:
-    # Menampilkan pie chart di kolom pertama
     st.plotly_chart(fig_pie, use_container_width=True)
 
 with col2:
-    # Menampilkan bar chart di kolom kedua
     st.plotly_chart(fig_city, use_container_width=True)
 
-# Menampilkan scatter plot
 st.plotly_chart(fig_bar, use_container_width=True)
 
-# Menampilkan scatter plot
 st.plotly_chart(fig_scatter, use_container_width=True)
 
-# Pastikan kolom tanggal dalam format datetime
-df['order_delivered_customer_date'] = pd.to_datetime(df['order_delivered_customer_date'])
+filtered_df['order_delivered_customer_date'] = pd.to_datetime(filtered_df['order_delivered_customer_date'])
 
-# Tentukan tanggal referensi (misalnya, hari ini)
 reference_date = datetime.today()
 
-# 1. Recency: Menghitung selisih antara tanggal pengiriman terakhir dengan tanggal referensi
-recency = df.groupby('customer_id')['order_delivered_customer_date'].max()
-recency = (reference_date - recency).dt.days  # Hitung selisih dalam hari
+recency = filtered_df.groupby('customer_id')['order_delivered_customer_date'].max()
+recency = (reference_date - recency).dt.days 
 
-# 2. Frequency: Menghitung jumlah pesanan per pelanggan
-frequency = df.groupby('customer_id')['order_id'].count()
+frequency = filtered_df.groupby('customer_id')['order_id'].count()
 
-# 3. Monetary: Menghitung total pembayaran per pelanggan
-monetary = df.groupby('customer_id')['payment_value_sum'].sum()
+monetary = filtered_df.groupby('customer_id')['payment_value_sum'].sum()
 
-# Gabungkan ketiga metrik menjadi satu DataFrame
 rfm = pd.DataFrame({
     'Recency': recency,
     'Frequency': frequency,
     'Monetary': monetary
 })
 
-# Mengisi nilai kosong dengan 0 sebelum melanjutkan ke proses penghitungan skor
 rfm = rfm.fillna(0)
 
-# Cek apakah kolom 'Frequency' memiliki cukup variasi
+
 if len(rfm['Frequency'].unique()) > 1:
-    # Skor berdasarkan kuantil untuk Frequency jika ada variasi
     rfm['F_rank'] = pd.qcut(rfm['Frequency'], 5, labels=False) + 1
 else:
-    # Jika tidak ada variasi, beri skor tetap (misalnya 3)
     rfm['F_rank'] = 3
 
-# Skor untuk Recency dan Monetary tetap menggunakan qcut
 rfm['R_rank'] = pd.qcut(rfm['Recency'], 5, labels=False) + 1
 rfm['M_rank'] = pd.qcut(rfm['Monetary'], 5, labels=False) + 1
 
-# Pastikan nilai pada kolom R_rank, F_rank, dan M_rank berupa integer
 rfm['R_rank'] = rfm['R_rank'].astype(int)
 rfm['F_rank'] = rfm['F_rank'].astype(int)
 rfm['M_rank'] = rfm['M_rank'].astype(int)
 
-# Gabungkan skor RFM menjadi satu kolom
 rfm['RFM_Score'] = rfm['R_rank'].astype(str) + rfm['F_rank'].astype(str) + rfm['M_rank'].astype(str)
 
 def assign_rfm_segment(score):
@@ -268,61 +226,46 @@ def assign_rfm_segment(score):
     else:
         return 'Other'
 
-# Terapkan fungsi ke kolom RFM_Score
 rfm['Segment'] = rfm['RFM_Score'].astype(str).apply(assign_rfm_segment)
 
-# Hitung jumlah customer per segment
 segment_counts = rfm['Segment'].value_counts()
 labels = segment_counts.index.tolist()
 sizes = segment_counts.values.tolist()
 
-# Warna acak untuk setiap segmen
 colors = plt.cm.Set3(range(len(labels)))
 
 st.subheader("Advance Analytics",  divider="gray")
 st.markdown("#### RFM Analysis")
 
-
-# Layout Streamlit dengan dua kolom
 col1, col2 = st.columns(2)
 
-# Menampilkan treemap di kolom pertama
 with col1:
-    # Buat figure dan axis
     fig, ax = plt.subplots(figsize=(12, 8))
     squarify.plot(
         sizes=sizes, 
         label=[f"{label}\n({count})" for label, count in zip(labels, sizes)],
         color=colors,
         alpha=0.8,
-        ax=ax  # Gunakan axis yang telah dibuat
+        ax=ax
     )
-    # ax.set_title("Treemap Segmentasi Pelanggan Berdasarkan Jumlah", fontsize=16)
-    ax.axis('off')  # Sembunyikan axis
-    st.pyplot(fig)  # Kirimkan fig ke st.pyplot()
+    ax.axis('off')
+    st.pyplot(fig)
 
-# Menampilkan DataFrame berdasarkan segmen di kolom kedua
 with col2:
-    # Grouping by segment and aggregating mean values of Recency, Frequency, and Monetary
     segment_summary = rfm.groupby('Segment')[['Recency', 'Frequency', 'Monetary']].mean().reset_index()
 
-    # Adding customer count by using group size (since customer_id is the index)
     segment_summary['Customer Count'] = rfm.groupby('Segment').size().values
 
-    # Convert to integer for clean display
     segment_summary['Frequency'] = segment_summary['Frequency'].astype(int)
     segment_summary['Monetary'] = segment_summary['Monetary'].astype(int)
 
-    # Apply bar-style coloring to the metrics
     styled_df = segment_summary.style.bar(
         subset=['Customer Count', 'Recency', 'Frequency', 'Monetary'],
         color='#5fba7d'
     ).format({'Recency': '{:.1f}', 'Frequency': '{:d}', 'Monetary': '{:d}'})
 
-    # Display the styled DataFrame in Streamlit
     st.dataframe(styled_df, use_container_width=True)
 
-# Layout 3 columns in Streamlit
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -340,8 +283,6 @@ with col3:
                            color_discrete_sequence=['salmon'])
     st.plotly_chart(fig_mon, use_container_width=True)
 
-# --- Plotly Visualizations ---
-# 1. Bar chart for number of customers per segment (Plotly)
 fig_bar_segment = px.bar(
     x=segment_counts.index,
     y=segment_counts.values,
@@ -351,14 +292,12 @@ fig_bar_segment = px.bar(
     color_discrete_sequence=px.colors.qualitative.Set2
 )
 
-# Update layout for better appearance
 fig_bar_segment.update_layout(
     xaxis_title='Segment',
     yaxis_title='Number of Customers',
     xaxis_tickangle=45
 )
 
-# 2. Scatter plot for Frequency vs Monetary by Segment (Plotly)
 fig_scatter_segment = px.scatter(
     rfm,
     x='Frequency',
@@ -369,19 +308,16 @@ fig_scatter_segment = px.scatter(
     color_discrete_sequence=px.colors.qualitative.Set2
 )
 
-# Use st.columns to display the plots side by side
 col1, col2 = st.columns(2)
 
-# Plot the bar chart in the first column
 with col1:
     st.plotly_chart(fig_bar_segment, use_container_width=True)
 
-# Plot the scatter plot in the second column
 with col2:
     st.plotly_chart(fig_scatter_segment, use_container_width=True)
 
 st.markdown("#### Geospatial Analysis")
-# --- Load data negara dari GeoJSON online ---
+
 @st.cache_data
 def load_world():
     url = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson"
@@ -389,8 +325,7 @@ def load_world():
 
 world = load_world()
 
-# Agregasi per state
-df_state_grouped = df.groupby('customer_state').agg({
+df_state_grouped = filtered_df.groupby('customer_state').agg({
     'customer_id': 'nunique',
     'geolocation_lat_cons': 'mean',
     'geolocation_lng_cons': 'mean'
@@ -398,7 +333,6 @@ df_state_grouped = df.groupby('customer_state').agg({
 
 df_state_grouped.rename(columns={'customer_id': 'customer_count'}, inplace=True)
 
-# Plot
 fig = px.scatter_geo(
     df_state_grouped,
     lat='geolocation_lat_cons',
@@ -413,7 +347,7 @@ fig = px.scatter_geo(
 
 fig.update_layout(
     geo=dict(
-        projection=dict(type='natural earth'),  # atau 'equirectangular', 'mercator', dll.
+        projection=dict(type='natural earth'), 
         showland=True,
         landcolor='lightgray'
     ),
@@ -421,27 +355,23 @@ fig.update_layout(
     title_x=0.5
 )
 
-# Tampilkan di Streamlit
+
 st.plotly_chart(fig, use_container_width=True)
 
 
-# Ensure all required columns are present
 cols_needed = ['product_category_name_english', 'product_weight_g', 'product_length_cm', 
                'product_height_cm', 'product_width_cm', 'shipping_late', 'delivered_late']
-df_clean = df[cols_needed].dropna()
+df_clean = filtered_df[cols_needed].dropna()
 
-# Calculate product volume
 df_clean['product_volume_cm3'] = (
     df_clean['product_length_cm'] * 
     df_clean['product_height_cm'] * 
     df_clean['product_width_cm']
 )
 
-# Calculate medians
 weight_median = df_clean['product_weight_g'].median()
 volume_median = df_clean['product_volume_cm3'].median()
 
-# Define product complexity group
 def categorize_complexity(row):
     weight = row['product_weight_g']
     volume = row['product_volume_cm3']
@@ -456,14 +386,12 @@ def categorize_complexity(row):
 
 df_clean['complexity_group'] = df_clean.apply(categorize_complexity, axis=1)
 
-# Aggregate delivery delay metrics by group
 grouped = df_clean.groupby('complexity_group').agg(
     total_orders=('shipping_late', 'count'),
     shipping_late_rate=('shipping_late', 'mean'),
     delivered_late_rate=('delivered_late', 'mean')
 ).reset_index()
 
-# Round percentage values
 grouped['shipping_late_rate'] = (grouped['shipping_late_rate'] * 100).round(2)
 grouped['delivered_late_rate'] = (grouped['delivered_late_rate'] * 100).round(2)
 
